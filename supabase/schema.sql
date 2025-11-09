@@ -75,7 +75,7 @@ CREATE INDEX idx_signals_created_at ON signals(created_at DESC);
 CREATE INDEX idx_signals_market_id ON signals(market_id);
 CREATE INDEX idx_whale_trades_market_id ON whale_trades(market_id);
 CREATE INDEX idx_whale_trades_timestamp ON whale_trades(timestamp DESC);
-CREATE INDEX idx_reddit_posts_signal_id ON reddit_posts(signal_id);
+CREATE INDEX idx_reddit_posts_market_id ON reddit_posts(market_id);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE markets ENABLE ROW LEVEL SECURITY;
