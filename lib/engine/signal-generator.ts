@@ -88,8 +88,9 @@ export async function generateSignals(
 
         console.log(`  ✅ Signal: ${analysis.score}/100 (${analysis.action})`);
 
-        // Only store signals with score >= 70 (strong bullish)
-        if (analysis.score >= 70) {
+        // Store signals with score >= 40 (for demo/testing)
+        // TODO: Raise to 70 for production
+        if (analysis.score >= 40) {
           // Store whale trades
           for (const trade of whaleTrades) {
             await createWhaleTrade({
