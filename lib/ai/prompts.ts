@@ -1,65 +1,77 @@
-import { Market, WhaleTrade } from '../api/polymarket';
-import { NewsArticle } from '../api/news';
-import { RedditPost } from '../api/reddit';
+import type { PolymarketMarket, PolymarketTrade } from '@/types/api';
+import type { NewsArticle } from '@/types/api';
+import type { RedditPostData } from '@/types/api';
 
+/**
+ * System prompt for Claude AI signal generation
+ */
+export const SYSTEM_PROMPT = `You are PolyOracle, an expert AI analyst for Polymarket prediction markets. Generate trading signals by analyzing whale trades, news, and social sentiment.
+
+Signal Score Guide (0-100):
+- 0-30: Strong bearish (market overpriced)
+- 31-55: Neutral/Hold
+- 56-70: Moderate bullish
+- 71-100: Strong bullish (market underpriced)
+
+Always respond with valid JSON only. No markdown, no explanations outside JSON.`;
+
+/**
+ * Build analysis prompt for Claude
+ */
 export function buildAnalysisPrompt(
-  market: Market,
-  whaleTrades: WhaleTrade[],
+  market: PolymarketMarket | any,
+  whaleTrades: PolymarketTrade[],
   news: NewsArticle[],
-  redditPosts: RedditPost[]
+  redditPosts: RedditPostData[]
 ): string {
-  return `You are an expert prediction market analyst. Analyze this Polymarket opportunity and provide a signal score.
+  const whaleVolume = whaleTrades.reduce((sum, t) => {
+    return sum + (parseFloat(t.size) * parseFloat(t.price));
+  }, 0);
 
-MARKET DETAILS:
+  return `Analyze this Polymarket prediction market:
+
+## MARKET
 Question: ${market.question}
-Description: ${market.description || 'N/A'}
-Current Volume: $${market.volume?.toLocaleString() || 'N/A'}
-Liquidity: $${market.liquidity?.toLocaleString() || 'N/A'}
+Current Price: $${market.outcomePrices?.[0] || 'N/A'}
+Volume: $${parseFloat(market.volume || 0).toLocaleString()}
+End Date: ${market.end_date_iso || 'Unknown'}
 
-WHALE TRADES (>$10K):
-${whaleTrades.length > 0 ? whaleTrades.map(t => 
-  `- ${t.side} $${t.size_usd.toFixed(2)} at ${t.price}`
-).join('\n') : 'No whale trades detected'}
+## WHALE ACTIVITY (Volume-Based Estimate)
+⚠️ Estimated ${whaleTrades.length} whale-sized positions based on market volume
+Total Estimated Volume: $${whaleVolume.toLocaleString()}
+${whaleTrades.length > 0 ? whaleTrades.slice(0, 3).map((t, i) => {
+  const size = parseFloat(t.size) * parseFloat(t.price);
+  return `${i + 1}. ${t.side} ~$${size.toLocaleString()} @ $${t.price}`;
+}).join('\n') : 'No significant whale activity detected'}
+Note: Estimates based on volume patterns. Real data requires CLOB API access.
 
-RELATED NEWS:
-${news.length > 0 ? news.map(n => 
-  `- ${n.title} (${n.source})`
+## NEWS (Last 48h)
+Count: ${news.length}
+${news.length > 0 ? news.slice(0, 3).map((n, i) =>
+  `${i + 1}. ${n.title} - ${n.source.name}`
 ).join('\n') : 'No recent news'}
 
-REDDIT SENTIMENT:
-${redditPosts.length > 0 ? redditPosts.map(p => 
-  `- ${p.title} (${p.upvoteRatio * 100}% upvoted, ${p.numComments} comments)`
-).join('\n') : 'No Reddit discussion'}
+## REDDIT SENTIMENT
+Posts: ${redditPosts.length}
+${redditPosts.length > 0 ? `Top: "${redditPosts[0].title}"
+Score: ${redditPosts.reduce((sum, p) => sum + p.score, 0)}
+Avg Upvote: ${(redditPosts.reduce((sum, p) => sum + p.upvote_ratio, 0) / redditPosts.length * 100).toFixed(0)}%` : 'No Reddit activity'}
 
-INSTRUCTIONS:
-Think step by step and analyze this market across 5 factors:
-
-1. Whale Activity (0-20 points): Are smart money traders entering? What size and direction?
-2. News Catalysts (0-25 points): Are there major news events that could move this market?
-3. Reddit Sentiment (0-20 points): What is the community saying? Is there momentum?
-4. Technical Factors (0-15 points): Volume spikes, liquidity changes, price action?
-5. Market Mispricing (0-20 points): Is the current price inefficient based on available data?
-
-For each factor, provide:
-- Score (out of max points)
-- Brief reasoning (1-2 sentences)
-
-Then calculate a final Signal Score (0-100) by summing all factors.
-
-RESPONSE FORMAT:
-Return ONLY valid JSON (no markdown, no code blocks):
+Generate trading signal. Respond with ONLY this JSON structure:
 {
-  "signalScore": <number 0-100>,
+  "score": <0-100>,
+  "action": "BUY"|"SELL"|"HOLD"|"WATCH",
+  "confidence": "LOW"|"MEDIUM"|"HIGH",
+  "urgency": "LOW"|"MEDIUM"|"HIGH"|"CRITICAL",
   "reasoning": {
-    "whaleActivity": { "score": <0-20>, "notes": "<reasoning>" },
-    "newsCatalysts": { "score": <0-25>, "notes": "<reasoning>" },
-    "redditSentiment": { "score": <0-20>, "notes": "<reasoning>" },
-    "technicalFactors": { "score": <0-15>, "notes": "<reasoning>" },
-    "marketMispricing": { "score": <0-20>, "notes": "<reasoning>" }
+    "summary": "<2-3 sentences>",
+    "whale_analysis": "<analysis of estimated whale positions>",
+    "news_analysis": "<analysis of news impact>",
+    "reddit_analysis": "<analysis of sentiment>",
+    "risk_factors": ["<factor1>", "<factor2>"],
+    "key_insights": ["<insight1>", "<insight2>"]
   },
-  "recommendation": {
-    "action": "<BUY|SELL|HOLD>",
-    "entryPrice": "<suggested price range or null>"
-  }
+  "entry_price": <number or null>,
+  "target_price": <number or null>
 }`;
 }

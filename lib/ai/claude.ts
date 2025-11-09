@@ -1,54 +1,87 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { Market, WhaleTrade } from '../api/polymarket';
-import { NewsArticle } from '../api/news';
-import { RedditPost } from '../api/reddit';
-import { buildAnalysisPrompt } from './prompts';
+import type { PolymarketMarket, PolymarketTrade, NewsArticle, RedditPostData } from '@/types/api';
+import type { ClaudeAnalysisResponse } from '@/types/api';
+import { buildAnalysisPrompt, SYSTEM_PROMPT } from './prompts';
 
-export interface SignalAnalysis {
-  signalScore: number;
-  reasoning: {
-    whaleActivity: { score: number; notes: string };
-    newsCatalysts: { score: number; notes: string };
-    redditSentiment: { score: number; notes: string };
-    technicalFactors: { score: number; notes: string };
-    marketMispricing: { score: number; notes: string };
-  };
-  recommendation: {
-    action: 'BUY' | 'SELL' | 'HOLD';
-    entryPrice: string | null;
-  };
-}
-
+/**
+ * Analyze market using Claude AI and generate trading signal
+ */
 export async function analyzeMarket(
-  market: Market,
-  whaleTrades: WhaleTrade[],
+  market: PolymarketMarket | any,
+  whaleTrades: PolymarketTrade[],
   news: NewsArticle[],
-  redditPosts: RedditPost[]
-): Promise<SignalAnalysis> {
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY
-  });
+  redditPosts: RedditPostData[]
+): Promise<ClaudeAnalysisResponse> {
+  // Read API key inside function to ensure dotenv has loaded
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-  const prompt = buildAnalysisPrompt(market, whaleTrades, news, redditPosts);
-
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
-    messages: [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  });
-
-  const text = response.content[0].text;
-  
-  // Extract JSON from response (handle markdown code blocks if present)
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Failed to parse JSON from Claude response');
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not found in environment');
   }
 
-  return JSON.parse(jsonMatch[0]);
+  try {
+    const client = new Anthropic({
+      apiKey: ANTHROPIC_API_KEY
+    });
+
+    const prompt = buildAnalysisPrompt(market, whaleTrades, news, redditPosts);
+
+    console.log('🤖 Calling Claude AI for market analysis...');
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+
+    if (response.content[0].type !== 'text') {
+      throw new Error('Unexpected response type from Claude');
+    }
+
+    const text = response.content[0].text;
+
+    // Extract JSON from response (handle markdown code blocks if present)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('Claude response:', text);
+      throw new Error('Failed to parse JSON from Claude response');
+    }
+
+    const analysis: ClaudeAnalysisResponse = JSON.parse(jsonMatch[0]);
+
+    // Validate response structure
+    if (typeof analysis.score !== 'number' || !analysis.action || !analysis.confidence) {
+      throw new Error('Invalid response structure from Claude');
+    }
+
+    console.log(`✅ Signal generated: Score ${analysis.score}/100, Action: ${analysis.action}`);
+
+    return analysis;
+  } catch (error: any) {
+    console.error('Error analyzing market with Claude:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Generate signal from market data (convenience function)
+ */
+export async function generateSignal(data: {
+  market: PolymarketMarket | any;
+  whaleTrades: PolymarketTrade[];
+  newsArticles: NewsArticle[];
+  redditPosts: RedditPostData[];
+}): Promise<ClaudeAnalysisResponse> {
+  return await analyzeMarket(
+    data.market,
+    data.whaleTrades,
+    data.newsArticles,
+    data.redditPosts
+  );
 }

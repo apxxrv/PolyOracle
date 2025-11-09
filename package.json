@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:apis": "npx tsx scripts/test-apis.ts",
+    "test:supabase": "npx tsx scripts/test-supabase.ts",
+    "test:claude": "npx tsx scripts/test-claude.ts",
+    "test:integration": "npx tsx scripts/test-integration.ts",
+    "test:cron": "npx tsx scripts/test-cron.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
@@ -14,6 +19,8 @@
     "axios": "^1.7.9",
     "date-fns": "^3.0.6",
     "dotenv": "^17.2.3",
+    "graphql": "^16.12.0",
+    "graphql-request": "^7.3.1",
     "lucide-react": "^0.294.0",
     "next": "14.2.33",
     "react": "^18.3.1",
